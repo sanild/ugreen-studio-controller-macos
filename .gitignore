@@ -1,0 +1,5 @@
+.build/
+build/
+Assets/AppIcon.icns
+Studio-Controller-macOS.zip
+.DS_Store

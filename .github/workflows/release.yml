@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run protocol tests
+        run: ./scripts/test.sh
+      - name: Build app
+        run: ./scripts/build-app.sh
+      - name: Package app
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            "build/Studio Controller.app" \
+            Studio-Controller-macOS.zip
+          shasum -a 256 Studio-Controller-macOS.zip > SHA256SUMS.txt
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          Studio-Controller-macOS.zip
+          SHA256SUMS.txt
+          --verify-tag
+          --generate-notes
+          --title "Studio Controller $GITHUB_REF_NAME"

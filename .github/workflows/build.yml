@@ -1,0 +1,28 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run protocol tests
+        run: ./scripts/test.sh
+      - name: Build app
+        run: ./scripts/build-app.sh
+      - name: Package app
+        run: >-
+          ditto -c -k --sequesterRsrc --keepParent
+          "build/Studio Controller.app"
+          Studio-Controller-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Studio-Controller-macOS
+          path: Studio-Controller-macOS.zip
