@@ -83,7 +83,12 @@ struct ControllerMenuView: View {
         }
         .frame(width: 390, height: 650)
         .onAppear {
-            if controller.status == .disconnected {
+            switch controller.status {
+            case .connected:
+                controller.refresh()
+            case .connecting:
+                break
+            default:
                 controller.connect()
             }
         }

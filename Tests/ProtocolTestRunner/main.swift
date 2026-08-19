@@ -42,6 +42,23 @@ private func testNoiseModeEncoding() {
     expect(ANCDepth.decode(194), .gentle, "gentle/ambient decoding")
 }
 
+private func testBatteryRefresh() {
+    var state = HeadphoneState()
+    var payload = [UInt8](repeating: 0, count: 26)
+
+    payload[0] = 20
+    state.applyDeviceInfo(payload)
+    expect(state.battery, 20, "initial battery parsing")
+
+    payload[0] = 100
+    state.applyDeviceInfo(payload)
+    expect(state.battery, 100, "battery must update after charging")
+
+    payload[0] = 255
+    state.applyDeviceInfo(payload)
+    expect(state.battery, 100, "unavailable battery values must not replace a valid reading")
+}
+
 private func testFragmentedResponse() {
     var payload = [UInt8](repeating: 0, count: 26)
     payload[0] = 84
@@ -137,6 +154,7 @@ private func testCapturedStudioProResponse() {
 
 testDeviceInfoQuery()
 testNoiseModeEncoding()
+testBatteryRefresh()
 testFragmentedResponse()
 testButtonPacket()
 testPromptModePacket()

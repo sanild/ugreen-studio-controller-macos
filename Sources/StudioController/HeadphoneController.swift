@@ -41,6 +41,7 @@ final class HeadphoneController: ObservableObject {
     private let transport = RFCOMMTransport()
     private var receiveBuffer = Data()
     private var connectionGeneration = 0
+    private var periodicRefreshTask: Task<Void, Never>?
 
     init() {
         transport.onData = { [weak self] data in
@@ -50,6 +51,7 @@ final class HeadphoneController: ObservableObject {
         }
         transport.onError = { [weak self] error in
             Task { @MainActor in
+                self?.stopPeriodicRefresh()
                 self?.status = .failed(error.localizedDescription)
             }
         }
@@ -63,6 +65,7 @@ final class HeadphoneController: ObservableObject {
     }
 
     func connect() {
+        stopPeriodicRefresh()
         connectionGeneration += 1
         let generation = connectionGeneration
         receiveBuffer.removeAll(keepingCapacity: true)
@@ -85,6 +88,7 @@ final class HeadphoneController: ObservableObject {
     }
 
     func disconnect() {
+        stopPeriodicRefresh()
         connectionGeneration += 1
         transport.disconnect()
         status = .disconnected
@@ -207,7 +211,11 @@ final class HeadphoneController: ObservableObject {
         let validFrames = frames.filter(\.succeeded)
         guard !validFrames.isEmpty else { return }
 
+        let shouldStartPeriodicRefresh = status != .connected
         status = .connected
+        if shouldStartPeriodicRefresh {
+            startPeriodicRefresh(generation: connectionGeneration)
+        }
         Self.logger.info(
             "Connected to UGREEN Studio Pro; received \(validFrames.count, privacy: .public) response frame(s)"
         )
@@ -220,6 +228,11 @@ final class HeadphoneController: ObservableObject {
         switch frame.instruction {
         case UGREENProtocol.Instruction.deviceInfo.rawValue:
             state.applyDeviceInfo(frame.payload)
+            if let rawBattery = frame.payload.first {
+                Self.logger.info(
+                    "Device info updated; raw battery value is \(rawBattery, privacy: .public)"
+                )
+            }
         case UGREENProtocol.Instruction.firmwareVersion.rawValue:
             let primary = Array(frame.payload.prefix(3))
             let secondary = frame.payload.count >= 6 ? Array(frame.payload[3..<6]) : []
@@ -249,5 +262,24 @@ final class HeadphoneController: ObservableObject {
         default:
             break
         }
+    }
+
+    private func startPeriodicRefresh(generation: Int) {
+        periodicRefreshTask?.cancel()
+        periodicRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled,
+                      let self,
+                      generation == self.connectionGeneration,
+                      self.status == .connected else { return }
+                self.refresh()
+            }
+        }
+    }
+
+    private func stopPeriodicRefresh() {
+        periodicRefreshTask?.cancel()
+        periodicRefreshTask = nil
     }
 }
